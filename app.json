@@ -12,6 +12,9 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "fonts": [
+      "assets/BMJUA_ttf.ttf"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.baru.app"
@@ -25,7 +28,9 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }
-
