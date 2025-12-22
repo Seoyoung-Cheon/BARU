@@ -1,6 +1,6 @@
 # Baru App
 
-React Native + Expo로 구성된 모바일 앱 프로젝트입니다.
+React Native + Expo + TypeScript로 구성된 모바일 앱 프로젝트입니다.
 
 ## 시작하기
 
@@ -30,14 +30,15 @@ npm start
 
 ```
 BARU/
-├── App.js              # 메인 앱 컴포넌트
+├── App.tsx             # 메인 앱 컴포넌트 (TypeScript)
 ├── app.json            # Expo 설정
 ├── package.json        # 프로젝트 의존성
+├── tsconfig.json       # TypeScript 설정
 ├── babel.config.js     # Babel 설정
 └── assets/             # 이미지 및 리소스 파일
 ```
 
 ## 개발 가이드
 
-앱을 개발하려면 `App.js` 파일을 수정하세요. 컴포넌트는 `src/components/` 디렉토리에 추가할 수 있습니다.
+앱을 개발하려면 `App.tsx` 파일을 수정하세요. 컴포넌트는 `src/components/` 디렉토리에 추가할 수 있습니다. TypeScript를 사용하므로 타입 안정성을 활용할 수 있습니다.
 
