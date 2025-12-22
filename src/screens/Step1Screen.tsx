@@ -1,18 +1,14 @@
 import React from 'react';
 import { View, Image, StyleSheet, StatusBar, TouchableOpacity, Text } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../types/navigation';
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+const styleOptions = [
+  { id: 1, name: '스타일 1' },
+  { id: 2, name: '스타일 2' },
+  { id: 3, name: '스타일 3' },
+  { id: 4, name: '스타일 4' },
+];
 
-export default function HomeScreen() {
-  const navigation = useNavigation<NavigationProp>();
-
-  const handlePress = () => {
-    navigation.navigate('Step1');
-  };
-
+export default function Step1Screen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -23,13 +19,12 @@ export default function HomeScreen() {
           resizeMode="contain"
         />
       </View>
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity 
-          style={styles.button}
-          onPress={handlePress}
-        >
-          <Text style={styles.buttonText}>BARU 가기</Text>
-        </TouchableOpacity>
+      <View style={styles.gridContainer}>
+        {styleOptions.map((style) => (
+          <TouchableOpacity key={style.id} style={styles.styleCard}>
+            <Text style={styles.styleText}>{style.name}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
     </View>
   );
@@ -50,34 +45,33 @@ const styles = StyleSheet.create({
     width: 500,
     height: 200,
   },
-  buttonContainer: {
-    position: 'absolute',
-    bottom: 80,
-    left: 0,
-    right: 0,
+  gridContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: 20,
-    paddingBottom: 40,
-    alignItems: 'center',
+    paddingTop: 40,
+    justifyContent: 'space-between',
   },
-  button: {
+  styleCard: {
+    width: '48%',
+    aspectRatio: 1,
     backgroundColor: '#D7E3A1',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
     borderRadius: 12,
-    width: '100%',
-    maxWidth: 300,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 4,
     },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.3,
     shadowRadius: 4.65,
     elevation: 8,
   },
-  buttonText: {
-    color: '#ffffff',
+  styleText: {
+    color: '#000000',
     fontSize: 18,
     fontWeight: '600',
   },
