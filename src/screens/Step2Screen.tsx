@@ -225,7 +225,7 @@ export default function Step2Screen() {
           <Text style={styles.labelText}>선호지역 (선택)</Text>
           <TextInput
             style={styles.input}
-            placeholder="선호하는 지역 적기"
+            placeholder="ex) 제주도, 오사카 등등"
             placeholderTextColor="#999999"
             value={preferredRegion}
             onChangeText={setPreferredRegion}
