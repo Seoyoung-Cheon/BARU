@@ -1,0 +1,324 @@
+// API 기본 설정
+// React Native에서는 localhost가 실제 기기에서 작동하지 않습니다.
+// 실제 기기를 사용하는 경우 컴퓨터의 IP 주소를 사용해야 합니다.
+// Windows: ipconfig 명령어로 확인, Mac/Linux: ifconfig 명령어로 확인
+import { Platform } from 'react-native';
+
+// TODO: 실제 기기를 사용하는 경우 아래 IP 주소를 컴퓨터의 실제 IP로 변경하세요
+// 예: '192.168.55.206'
+const DEV_IP = '192.168.55.206'; // 실제 기기 사용 시 컴퓨터의 IP 주소로 변경
+
+const getApiBaseUrl = () => {
+  if (__DEV__) {
+    // 개발 환경
+    // 실제 기기를 사용하는 경우 DEV_IP 사용
+    // Android 에뮬레이터는 10.0.2.2 사용 가능
+    
+    if (Platform.OS === 'android') {
+      // 실제 기기 사용 시 DEV_IP, 에뮬레이터 사용 시 10.0.2.2
+      return `http://${DEV_IP}:3000/api`;
+    } else {
+      // iOS 시뮬레이터는 localhost 사용 가능, 실제 기기는 DEV_IP 사용
+      return `http://${DEV_IP}:3000/api`;
+    }
+  } else {
+    return 'https://your-production-api.com/api'; // 프로덕션 환경
+  }
+};
+
+const API_BASE_URL = getApiBaseUrl();
+
+// API 응답 타입
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
+}
+
+// 항공권 검색 파라미터
+export interface FlightSearchParams {
+  originLocationCode: string;
+  destinationLocationCode?: string; // 선택사항
+  departureDate: string;
+  returnDate?: string;
+  adults: number;
+  children?: number;
+  infants?: number;
+  travelClass?: string;
+  currencyCode?: string;
+  maxPrice: number; // 필수값
+  max?: number;
+  nonStop?: boolean;
+}
+
+// 항공권 정보 타입
+export interface FlightOffer {
+  type: string;
+  id: string;
+  price: {
+    currency: string;
+    total: string;
+    base: string;
+  };
+  itineraries: Array<{
+    duration: string;
+    segments: Array<{
+      departure: {
+        iataCode: string;
+        at: string;
+      };
+      arrival: {
+        iataCode: string;
+        at: string;
+      };
+      carrierCode: string;
+      number: string;
+    }>;
+  }>;
+  validatingAirlineCodes?: string[];
+}
+
+// 항공권 검색 응답 타입
+export interface FlightSearchResponse {
+  data: FlightOffer[];
+  meta?: any;
+  dictionaries?: any;
+}
+
+// 항공권 검색 API 호출
+export async function searchFlights(params: FlightSearchParams): Promise<ApiResponse<FlightSearchResponse>> {
+  try {
+    // maxPrice는 필수값
+    if (!params.maxPrice || params.maxPrice <= 0) {
+      return {
+        success: false,
+        error: 'maxPrice가 필요합니다.',
+        message: '최대 가격을 입력해주세요.',
+      };
+    }
+
+    const queryParams = new URLSearchParams();
+    queryParams.append('originLocationCode', params.originLocationCode);
+    queryParams.append('departureDate', params.departureDate);
+    queryParams.append('adults', params.adults.toString());
+    queryParams.append('maxPrice', params.maxPrice.toString());
+
+    if (params.returnDate) queryParams.append('returnDate', params.returnDate);
+    if (params.children) queryParams.append('children', params.children.toString());
+    if (params.infants) queryParams.append('infants', params.infants.toString());
+    if (params.travelClass) queryParams.append('travelClass', params.travelClass);
+    if (params.currencyCode) queryParams.append('currencyCode', params.currencyCode);
+    if (params.max) queryParams.append('max', params.max.toString());
+    if (params.nonStop !== undefined) queryParams.append('nonStop', params.nonStop.toString());
+
+    // maxPrice가 필수이므로 항상 여러 목적지 검색 API 사용
+    const endpoint = `${API_BASE_URL}/flights/offers/multiple?${queryParams.toString()}`;
+
+    console.log('항공권 검색 API 호출:', endpoint);
+    console.log('파라미터:', params);
+    console.log('API Base URL:', API_BASE_URL);
+
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log('API 응답 상태:', response.status, response.statusText);
+
+    if (!response.ok) {
+      let errorData;
+      try {
+        const errorText = await response.text();
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { message: `HTTP error! status: ${response.status}` };
+      }
+      
+      return {
+        success: false,
+        error: errorData.error?.message || errorData.message || `HTTP error! status: ${response.status}`,
+        message: errorData.error?.detail || errorData.message || '항공권 검색 중 오류가 발생했습니다.',
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      data: data.data || data,
+    };
+  } catch (error) {
+    let errorMessage = '네트워크 오류가 발생했습니다.';
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Network request failed')) {
+        errorMessage = `네트워크 연결에 실패했습니다.\n\n가능한 원인:\n1. 백엔드 서버가 실행 중인지 확인해주세요\n2. 실제 기기를 사용하는 경우 컴퓨터의 IP 주소를 확인해주세요\n3. 같은 Wi-Fi 네트워크에 연결되어 있는지 확인해주세요\n\n현재 API URL: ${API_BASE_URL}`;
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
+    console.error('API 호출 오류:', error);
+    console.error('API URL:', API_BASE_URL);
+    
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+      message: errorMessage,
+    };
+  }
+}
+
+// 호텔 가격비교 파라미터
+export interface HotelSearchParams {
+  cityCode: string;
+  checkInDate: string;
+  checkOutDate: string;
+  adults: number;
+  priceRange?: {
+    min?: number;
+    max?: number;
+  };
+}
+
+// 호텔 정보 타입
+export interface HotelOffer {
+  hotelId: string;
+  hotelName: string;
+  price: {
+    currency: string;
+    total: string;
+  };
+  rating?: number;
+  address?: string;
+}
+
+// 호텔 검색 응답 타입
+export interface HotelSearchResponse {
+  data: HotelOffer[];
+}
+
+// 호텔 가격비교 API 호출
+export async function searchHotels(params: HotelSearchParams): Promise<ApiResponse<HotelSearchResponse>> {
+  try {
+    const queryParams = new URLSearchParams();
+    queryParams.append('cityCode', params.cityCode);
+    queryParams.append('checkInDate', params.checkInDate);
+    queryParams.append('checkOutDate', params.checkOutDate);
+    queryParams.append('adults', params.adults.toString());
+
+    if (params.priceRange?.min) queryParams.append('minPrice', params.priceRange.min.toString());
+    if (params.priceRange?.max) queryParams.append('maxPrice', params.priceRange.max.toString());
+
+    const endpoint = `${API_BASE_URL}/hotels/offers?${queryParams.toString()}`;
+
+    console.log('호텔 검색 API 호출:', endpoint);
+
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      let errorData;
+      try {
+        const errorText = await response.text();
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { message: `HTTP error! status: ${response.status}` };
+      }
+      
+      return {
+        success: false,
+        error: errorData.error?.message || errorData.message || `HTTP error! status: ${response.status}`,
+        message: errorData.error?.detail || errorData.message || '호텔 검색 중 오류가 발생했습니다.',
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      data: data.data || data,
+    };
+  } catch (error) {
+    console.error('호텔 API 호출 오류:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+      message: '네트워크 오류가 발생했습니다.',
+    };
+  }
+}
+
+// 환전 API 파라미터
+export interface ExchangeParams {
+  fromCurrency: string;
+  toCurrency: string;
+  amount: number;
+}
+
+// 환전 정보 타입
+export interface ExchangeInfo {
+  fromCurrency: string;
+  toCurrency: string;
+  amount: number;
+  exchangeRate: number;
+  convertedAmount: number;
+}
+
+// 환전 API 호출
+export async function getExchangeRate(params: ExchangeParams): Promise<ApiResponse<ExchangeInfo>> {
+  try {
+    const queryParams = new URLSearchParams();
+    queryParams.append('from', params.fromCurrency);
+    queryParams.append('to', params.toCurrency);
+    queryParams.append('amount', params.amount.toString());
+
+    const endpoint = `${API_BASE_URL}/exchange?${queryParams.toString()}`;
+
+    console.log('환전 API 호출:', endpoint);
+
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      let errorData;
+      try {
+        const errorText = await response.text();
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { message: `HTTP error! status: ${response.status}` };
+      }
+      
+      return {
+        success: false,
+        error: errorData.error?.message || errorData.message || `HTTP error! status: ${response.status}`,
+        message: errorData.error?.detail || errorData.message || '환전 정보 조회 중 오류가 발생했습니다.',
+      };
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      data: data.data || data,
+    };
+  } catch (error) {
+    console.error('환전 API 호출 오류:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+      message: '네트워크 오류가 발생했습니다.',
+    };
+  }
+}

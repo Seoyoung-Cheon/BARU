@@ -3,14 +3,24 @@ import { View, Image, StyleSheet, StatusBar, TouchableOpacity, Text } from 'reac
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
+import { useAuth } from '../contexts/AuthContext';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function HomeScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const { isLoggedIn } = useAuth();
 
   const handlePress = () => {
     navigation.navigate('Step1');
+  };
+
+  const handleMyPagePress = () => {
+    if (isLoggedIn) {
+      navigation.navigate('MyPage');
+    } else {
+      navigation.navigate('Login', {});
+    }
   };
 
   return (
@@ -22,6 +32,13 @@ export default function HomeScreen() {
           style={styles.logo}
           resizeMode="contain"
         />
+        <TouchableOpacity
+          style={styles.myIconButton}
+          onPress={handleMyPagePress}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.myIconText}>{isLoggedIn ? 'My' : '로그인'}</Text>
+        </TouchableOpacity>
       </View>
       <View style={styles.buttonContainer}>
         <TouchableOpacity 
@@ -45,10 +62,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingTop: 10,
+    position: 'relative',
   },
   logo: {
     width: 500,
     height: 200,
+  },
+  myIconButton: {
+    position: 'absolute',
+    right: 20,
+    top: 85,
+    width: 50,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  myIconText: {
+    fontSize: 14,
+    fontFamily: 'Juache',
+    color: '#333333',
+    fontWeight: 'bold',
   },
   buttonContainer: {
     position: 'absolute',

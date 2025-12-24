@@ -16,8 +16,10 @@ export default function Step2Screen() {
   const [arrivalDate, setArrivalDate] = useState<Date | null>(null);
   const [showDeparturePicker, setShowDeparturePicker] = useState(false);
   const [showArrivalPicker, setShowArrivalPicker] = useState(false);
-  const [preferredRegion, setPreferredRegion] = useState('');
+  const [isDomestic, setIsDomestic] = useState<boolean>(true); // 국내/국외 토글 (기본값: 국내)
   const [showPeopleModal, setShowPeopleModal] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [validationMessage, setValidationMessage] = useState('');
 
   const peopleOptions = ['1명', '2명', '3명', '4명', '5명', '6명','7명','8명','9명','10명'];
 
@@ -56,8 +58,40 @@ export default function Step2Screen() {
   };
 
   const handleNext = () => {
-    // Step3 또는 결과 화면으로 이동
-    navigation.navigate('Home');
+    // 필수값 검증
+    const missingFields: string[] = [];
+    
+    if (!budget || budget.trim() === '') {
+      missingFields.push('나의 예산');
+    }
+    
+    if (!peopleCount || peopleCount === '인원 수') {
+      missingFields.push('인원 수');
+    }
+    
+    if (!departureDate) {
+      missingFields.push('출발일자');
+    }
+    
+    if (!arrivalDate) {
+      missingFields.push('도착일자');
+    }
+    
+    // 필수값이 하나라도 없으면 모달 표시
+    if (missingFields.length > 0) {
+      setValidationMessage(`다음 항목을 입력해주세요:\n${missingFields.join(', ')}`);
+      setShowValidationModal(true);
+      return;
+    }
+    
+    // 모든 필수값이 입력되었으면 결과 화면으로 이동
+    navigation.navigate('Result', {
+      budget: budget,
+      peopleCount: peopleCount,
+      departureDate: departureDate || undefined,
+      arrivalDate: arrivalDate || undefined,
+      isDomestic: isDomestic,
+    });
   };
 
   const formatDate = (date: Date): string => {
@@ -69,14 +103,26 @@ export default function Step2Screen() {
 
   const calculateNights = (): string => {
     if (!departureDate || !arrivalDate) return '';
-    if (arrivalDate <= departureDate) return '';
     
-    const diffTime = arrivalDate.getTime() - departureDate.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const nights = diffDays - 1;
+    // 날짜만 비교하기 위해 시간을 초기화
+    const depDate = new Date(departureDate);
+    depDate.setHours(0, 0, 0, 0);
+    const arrDate = new Date(arrivalDate);
+    arrDate.setHours(0, 0, 0, 0);
+    
+    if (arrDate <= depDate) return '';
+    
+    // 날짜 차이 계산 (밀리초 단위)
+    const diffTime = arrDate.getTime() - depDate.getTime();
+    // 일 단위로 변환 (Math.floor 사용)
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    // 박수는 날짜 차이와 동일 
+    const nights = diffDays;
     
     if (nights === 0) return '당일치기';
-    return `${nights}박 ${diffDays}일`;
+
+    return `${nights}박 ${nights + 1}일`;
   };
 
   const [tempYear, setTempYear] = useState(new Date().getFullYear());
@@ -88,8 +134,29 @@ export default function Step2Screen() {
     return new Date(year, month, 0).getDate();
   };
 
+  const getToday = (): Date => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  };
+
+  const isDateInPast = (year: number, month: number, day: number): boolean => {
+    const date = new Date(year, month - 1, day);
+    date.setHours(0, 0, 0, 0);
+    const today = getToday();
+    return date < today;
+  };
+
   const confirmDate = () => {
     const selectedDate = new Date(tempYear, tempMonth - 1, tempDay);
+    selectedDate.setHours(0, 0, 0, 0);
+    const today = getToday();
+
+    // 과거 날짜 선택 방지
+    if (selectedDate < today) {
+      return; // 과거 날짜는 선택 불가
+    }
+
     if (isSelectingDeparture) {
       setDepartureDate(selectedDate);
       if (arrivalDate && selectedDate > arrivalDate) {
@@ -97,9 +164,10 @@ export default function Step2Screen() {
       }
       setShowDeparturePicker(false);
     } else {
+      // 도착일자는 출발일자 이후만 선택 가능
       if (departureDate && selectedDate >= departureDate) {
         setArrivalDate(selectedDate);
-      } else if (!departureDate) {
+      } else if (!departureDate && selectedDate >= today) {
         setArrivalDate(selectedDate);
       }
       setShowArrivalPicker(false);
@@ -107,24 +175,41 @@ export default function Step2Screen() {
   };
 
   const openDeparturePicker = () => {
+    const today = new Date();
     if (departureDate) {
+      // 출발일자가 있으면 해당 날짜로 초기화
       setTempYear(departureDate.getFullYear());
       setTempMonth(departureDate.getMonth() + 1);
       setTempDay(departureDate.getDate());
+    } else {
+      // 출발일자가 없으면 오늘 날짜로 초기화
+      setTempYear(today.getFullYear());
+      setTempMonth(today.getMonth() + 1);
+      setTempDay(today.getDate());
     }
     setIsSelectingDeparture(true);
     setShowDeparturePicker(true);
   };
 
   const openArrivalPicker = () => {
+    const today = new Date();
     if (arrivalDate) {
+      // 도착일자가 있으면 해당 날짜로 초기화
       setTempYear(arrivalDate.getFullYear());
       setTempMonth(arrivalDate.getMonth() + 1);
       setTempDay(arrivalDate.getDate());
     } else if (departureDate) {
-      setTempYear(departureDate.getFullYear());
-      setTempMonth(departureDate.getMonth() + 1);
-      setTempDay(departureDate.getDate());
+      // 도착일자가 없고 출발일자가 있으면 출발일자 다음 날로 초기화
+      const nextDay = new Date(departureDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      setTempYear(nextDay.getFullYear());
+      setTempMonth(nextDay.getMonth() + 1);
+      setTempDay(nextDay.getDate());
+    } else {
+      // 둘 다 없으면 오늘 날짜로 초기화
+      setTempYear(today.getFullYear());
+      setTempMonth(today.getMonth() + 1);
+      setTempDay(today.getDate());
     }
     setIsSelectingDeparture(false);
     setShowArrivalPicker(true);
@@ -169,16 +254,20 @@ export default function Step2Screen() {
           <View style={styles.budgetInputWrapper}>
             <TextInput
               style={styles.budgetInput}
-              placeholder="ex)1000000"
+              placeholder="ex)50"
               placeholderTextColor="#999999"
               value={budget}
               onChangeText={(text) => {
                 const numericValue = text.replace(/[^0-9]/g, '');
-                setBudget(numericValue);
+                // 4자리까지만 입력 가능
+                if (numericValue.length <= 4) {
+                  setBudget(numericValue);
+                }
               }}
               keyboardType="numeric"
+              maxLength={4}
             />
-            <Text style={styles.currencyText}>원</Text>
+            <Text style={styles.currencyText}>만원</Text>
           </View>
         </View>
 
@@ -196,7 +285,12 @@ export default function Step2Screen() {
         </View>
 
         <View style={styles.sectionContainer}>
-          <Text style={styles.labelText}>일정</Text>
+          <View style={styles.scheduleHeader}>
+            <Text style={styles.labelText}>일정</Text>
+            {departureDate && arrivalDate && (
+              <Text style={styles.nightsText}>{calculateNights()}</Text>
+            )}
+          </View>
           <View style={styles.dateContainer}>
             <TouchableOpacity
               style={styles.dateButton}
@@ -216,20 +310,28 @@ export default function Step2Screen() {
               </Text>
             </TouchableOpacity>
           </View>
-          {departureDate && arrivalDate && (
-            <Text style={styles.nightsText}>{calculateNights()}</Text>
-          )}
         </View>
 
         <View style={styles.sectionContainer}>
-          <Text style={styles.labelText}>선호지역 (선택)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="ex) 제주도, 오사카 등등"
-            placeholderTextColor="#999999"
-            value={preferredRegion}
-            onChangeText={setPreferredRegion}
-          />
+          <Text style={styles.labelText}>여행 지역</Text>
+          <View style={styles.toggleContainer}>
+            <TouchableOpacity
+              style={[styles.toggleButton, isDomestic && styles.toggleButtonActive]}
+              onPress={() => setIsDomestic(true)}
+            >
+              <Text style={[styles.toggleButtonText, isDomestic && styles.toggleButtonTextActive]}>
+                국내
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleButton, !isDomestic && styles.toggleButtonActive]}
+              onPress={() => setIsDomestic(false)}
+            >
+              <Text style={[styles.toggleButtonText, !isDomestic && styles.toggleButtonTextActive]}>
+                국외
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
 
@@ -298,60 +400,164 @@ export default function Step2Screen() {
               <View style={styles.datePickerColumn}>
                 <Text style={styles.datePickerLabel}>년</Text>
                 <ScrollView style={styles.datePickerScroll}>
-                  {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + i).map((year) => (
-                    <TouchableOpacity
-                      key={year}
-                      style={[styles.datePickerItem, tempYear === year && styles.datePickerItemSelected]}
-                      onPress={() => setTempYear(year)}
-                    >
-                      <Text style={[styles.datePickerItemText, tempYear === year && styles.datePickerItemTextSelected]}>
-                        {year}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                  {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + i)
+                    .filter((year) => {
+                      // 출발일자 선택 시 과거 년도는 표시하지 않음
+                      if (isSelectingDeparture) {
+                        return year >= new Date().getFullYear();
+                      }
+                      return true;
+                    })
+                    .map((year) => {
+                      const today = new Date();
+                      const isCurrentYear = year === today.getFullYear();
+                      
+                      return (
+                        <TouchableOpacity
+                          key={year}
+                          style={[
+                            styles.datePickerItem, 
+                            tempYear === year && styles.datePickerItemSelected
+                          ]}
+                          onPress={() => {
+                            setTempYear(year);
+                            // 년도 변경 시 월/일도 유효한 범위로 조정
+                            if (isCurrentYear && tempMonth < today.getMonth() + 1) {
+                              setTempMonth(today.getMonth() + 1);
+                              setTempDay(today.getDate());
+                            }
+                          }}
+                        >
+                          <Text style={[
+                            styles.datePickerItemText, 
+                            tempYear === year && styles.datePickerItemTextSelected
+                          ]}>
+                            {year}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                 </ScrollView>
               </View>
               <View style={styles.datePickerColumn}>
                 <Text style={styles.datePickerLabel}>월</Text>
                 <ScrollView style={styles.datePickerScroll}>
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                    <TouchableOpacity
-                      key={month}
-                      style={[styles.datePickerItem, tempMonth === month && styles.datePickerItemSelected]}
-                      onPress={() => {
-                        setTempMonth(month);
-                        const daysInMonth = getDaysInMonth(tempYear, month);
-                        if (tempDay > daysInMonth) {
-                          setTempDay(daysInMonth);
-                        }
-                      }}
-                    >
-                      <Text style={[styles.datePickerItemText, tempMonth === month && styles.datePickerItemTextSelected]}>
-                        {month}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                  {Array.from({ length: 12 }, (_, i) => i + 1)
+                    .filter((month) => {
+                      const today = new Date();
+                      // 출발일자 선택 시 과거 월은 표시하지 않음
+                      if (isSelectingDeparture && tempYear === today.getFullYear()) {
+                        return month >= today.getMonth() + 1;
+                      }
+                      return true;
+                    })
+                    .map((month) => {
+                      const today = new Date();
+                      const isCurrentMonth = tempYear === today.getFullYear() && month === today.getMonth() + 1;
+                      
+                      return (
+                        <TouchableOpacity
+                          key={month}
+                          style={[
+                            styles.datePickerItem, 
+                            tempMonth === month && styles.datePickerItemSelected
+                          ]}
+                          onPress={() => {
+                            setTempMonth(month);
+                            const daysInMonth = getDaysInMonth(tempYear, month);
+                            if (tempDay > daysInMonth) {
+                              setTempDay(daysInMonth);
+                            }
+                            // 현재 월인 경우 오늘 날짜 이후만 선택 가능하도록 일 조정
+                            if (isCurrentMonth && tempDay < today.getDate()) {
+                              setTempDay(today.getDate());
+                            }
+                          }}
+                        >
+                          <Text style={[
+                            styles.datePickerItemText, 
+                            tempMonth === month && styles.datePickerItemTextSelected
+                          ]}>
+                            {month}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                 </ScrollView>
               </View>
               <View style={styles.datePickerColumn}>
                 <Text style={styles.datePickerLabel}>일</Text>
                 <ScrollView style={styles.datePickerScroll}>
-                  {Array.from({ length: getDaysInMonth(tempYear, tempMonth) }, (_, i) => i + 1).map((day) => (
-                    <TouchableOpacity
-                      key={day}
-                      style={[styles.datePickerItem, tempDay === day && styles.datePickerItemSelected]}
-                      onPress={() => setTempDay(day)}
-                    >
-                      <Text style={[styles.datePickerItemText, tempDay === day && styles.datePickerItemTextSelected]}>
-                        {day}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                  {Array.from({ length: getDaysInMonth(tempYear, tempMonth) }, (_, i) => i + 1)
+                    .filter((day) => {
+                      if (isSelectingDeparture) {
+                        // 출발일자 선택 시 과거 날짜는 표시하지 않음
+                        return !isDateInPast(tempYear, tempMonth, day);
+                      } else {
+                        // 도착일자 선택 시 출발일자 이후만 표시
+                        if (departureDate) {
+                          const date = new Date(tempYear, tempMonth - 1, day);
+                          date.setHours(0, 0, 0, 0);
+                          const depDate = new Date(departureDate);
+                          depDate.setHours(0, 0, 0, 0);
+                          return date >= depDate;
+                        } else {
+                          // 출발일자가 없으면 과거 날짜만 제외
+                          return !isDateInPast(tempYear, tempMonth, day);
+                        }
+                      }
+                    })
+                    .map((day) => {
+                      return (
+                        <TouchableOpacity
+                          key={day}
+                          style={[
+                            styles.datePickerItem, 
+                            tempDay === day && styles.datePickerItemSelected
+                          ]}
+                          onPress={() => {
+                            setTempDay(day);
+                          }}
+                        >
+                          <Text style={[
+                            styles.datePickerItemText, 
+                            tempDay === day && styles.datePickerItemTextSelected
+                          ]}>
+                            {day}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                 </ScrollView>
               </View>
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* 필수값 검증 모달 */}
+      <Modal
+        transparent={true}
+        visible={showValidationModal}
+        animationType="fade"
+        onRequestClose={() => setShowValidationModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.validationModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowValidationModal(false)}
+        >
+          <View style={styles.validationModalContent}>
+            <Text style={styles.validationModalTitle}>입력 필요</Text>
+            <Text style={styles.validationModalMessage}>{validationMessage}</Text>
+            <TouchableOpacity
+              style={styles.validationModalButton}
+              onPress={() => setShowValidationModal(false)}
+            >
+              <Text style={styles.validationModalButtonText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -520,11 +726,16 @@ const styles = StyleSheet.create({
     color: '#666666',
     marginHorizontal: 12,
   },
+  scheduleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   nightsText: {
     fontSize: 16,
     fontFamily: 'Juache',
-    color: '#D7E3A1',
-    marginTop: 8,
+    color: '#000000',
     fontWeight: 'bold',
   },
   buttonContainer: {
@@ -612,7 +823,7 @@ const styles = StyleSheet.create({
   pickerButtonText: {
     fontSize: 16,
     fontFamily: 'Juache',
-    color: '#D7E3A1',
+    color: '#000000',
     fontWeight: 'bold',
   },
   datePickerContainer: {
@@ -649,6 +860,84 @@ const styles = StyleSheet.create({
     color: '#666666',
   },
   datePickerItemTextSelected: {
+    color: '#000000',
+    fontWeight: 'bold',
+  },
+  datePickerItemDisabled: {
+    opacity: 0.3,
+  },
+  datePickerItemTextDisabled: {
+    color: '#cccccc',
+  },
+  validationModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  validationModalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 24,
+    width: '80%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  validationModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Juache',
+    color: '#000000',
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  validationModalMessage: {
+    fontSize: 16,
+    fontFamily: 'Juache',
+    color: '#333333',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  validationModalButton: {
+    backgroundColor: '#D7E3A1',
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  validationModalButtonText: {
+    fontSize: 16,
+    fontFamily: 'Juache',
+    color: '#ffffff',
+    fontWeight: 'bold',
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    width: '100%',
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    padding: 4,
+  },
+  toggleButton: {
+    flex: 1,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  toggleButtonActive: {
+    backgroundColor: '#D7E3A1',
+  },
+  toggleButtonText: {
+    fontSize: 16,
+    fontFamily: 'Juache',
+    color: '#666666',
+  },
+  toggleButtonTextActive: {
     color: '#000000',
     fontWeight: 'bold',
   },
