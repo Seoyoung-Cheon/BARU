@@ -1,6 +1,7 @@
 import type { FlightItem, HotelPrice, ExchangeAmount } from '../screens/ResultScreen';
 
 export type RootStackParamList = {
+  Intro: undefined;
   Home: undefined;
   Step1: undefined;
   Step2: undefined;

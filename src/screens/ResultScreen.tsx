@@ -3,7 +3,7 @@ import { View, Image, StyleSheet, StatusBar, Text, TouchableOpacity, Animated, S
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
-import { searchFlights, searchHotels, getExchangeRate, type FlightSearchParams, type HotelSearchParams, type ExchangeParams } from '../services/api';
+import { searchTrip, type TripSearchRequest, type TripSearchResponse } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -181,7 +181,7 @@ export default function ResultScreen() {
       const departureDate = route.params?.departureDate;
       const arrivalDate = route.params?.arrivalDate;
       const peopleCount = route.params?.peopleCount || '1명';
-      const adults = parseInt(peopleCount.replace('명', '')) || 1;
+      const people = parseInt(peopleCount.replace('명', '')) || 1;
 
       if (!departureDate || !arrivalDate) {
         console.error('출발일자 또는 도착일자가 없습니다.');
@@ -197,7 +197,7 @@ export default function ResultScreen() {
         return `${year}-${month}-${day}`;
       };
 
-      // 예산을 maxPrice로 변환 (만원 단위를 원 단위로) - 필수값
+      // 예산을 원 단위로 변환 (만원 단위를 원 단위로) - 필수값
       if (!currentBudget || currentBudget.trim() === '') {
         console.error('예산이 입력되지 않았습니다.');
         setLoading(false);
@@ -213,194 +213,184 @@ export default function ResultScreen() {
         return;
       }
 
-      const maxPrice = budgetValue * 10000; // 만원을 원으로 변환
+      const budgetWon = budgetValue * 10000; // 만원을 원으로 변환
 
-      // 기본 출발지 설정
-      const originLocationCode = 'ICN'; // 기본값: 인천
-
-      const searchParams: FlightSearchParams = {
-        originLocationCode,
-        departureDate: formatDate(departureDate),
+      // 백엔드 통합 API 호출
+      // 백엔드는 영어 지역 코드를 기대하므로 변환
+      // 국내는 null로 전달하여 백엔드가 기본값 처리하도록 함
+      const preferredRegion = route.params?.isDomestic 
+        ? null // 국내는 백엔드에서 기본값 처리
+        : 'JAPAN'; // 국외는 일본으로 기본 설정 (실제로는 사용자 선택에 따라 변경 가능)
+      
+      const searchParams: TripSearchRequest = {
+        budgetWon,
+        people,
+        departDate: formatDate(departureDate),
         returnDate: formatDate(arrivalDate),
-        adults,
-        currencyCode: 'KRW',
-        maxPrice, // 필수값
-        max: 50, // 여러 목적지 검색이므로 더 많은 결과 표시
+        preferredRegion: preferredRegion || undefined,
       };
 
-      const response = await searchFlights(searchParams);
+      console.log('백엔드 API 호출 시작:', searchParams);
+      const response = await searchTrip(searchParams);
 
-      console.log('항공권 검색 응답:', response);
-      console.log('응답 데이터:', response.data);
+      console.log('백엔드 여행 검색 응답 전체:', JSON.stringify(response, null, 2));
+      console.log('응답 success:', response.success);
+      console.log('응답 error:', response.error);
+      console.log('응답 message:', response.message);
+      console.log('응답 data:', response.data);
 
       if (response.success && response.data) {
+        const tripData = response.data;
+        
+        console.log('tripData 전체:', JSON.stringify(tripData, null, 2));
+        console.log('tripData.flights:', tripData.flights);
+        console.log('tripData.flights 타입:', typeof tripData.flights);
+        console.log('tripData.flights 배열 여부:', Array.isArray(tripData.flights));
+        
         // 항공권 데이터를 FlightItem 형식으로 변환
-        const flightDataArray = response.data.data || [];
+        const flightDataArray = tripData.flights || [];
         console.log('항공권 데이터 배열:', flightDataArray);
         console.log('항공권 개수:', flightDataArray.length);
         
-        const allFlights: FlightItem[] = flightDataArray.map((offer, index) => {
-          const firstItinerary = offer.itineraries[0];
-          const firstSegment = firstItinerary?.segments[0];
-          const lastSegment = firstItinerary?.segments[firstItinerary.segments.length - 1];
+        if (flightDataArray.length === 0) {
+          console.warn('⚠️ 백엔드에서 항공권 데이터가 비어있습니다!');
+          console.warn('백엔드 응답 전체:', JSON.stringify(tripData, null, 2));
+        }
+        
+        // 항공사 코드를 한글 이름으로 변환하는 매핑
+        const airlineNames: { [key: string]: string } = {
+          'KE': '대한항공',
+          'OZ': '아시아나항공',
+          'JL': '일본항공',
+          'NH': '전일본공수',
+          'TG': '타이항공',
+          'SQ': '싱가포르항공',
+          'CX': '캐세이퍼시픽',
+          'BR': '에바항공',
+          'CI': '중화항공',
+          'CZ': '중국남방항공',
+          'MU': '중국동방항공',
+          'CA': '중국국제항공',
+          'AA': '아메리칸항공',
+          'DL': '델타항공',
+          'UA': '유나이티드항공',
+          'LH': '루프트한자',
+          'AF': '에어프랑스',
+          'BA': '영국항공',
+          'KL': 'KLM',
+          'QF': '콴타스항공',
+          'EK': '에미레이트항공',
+          'QR': '카타르항공',
+          'TK': '터키항공',
+          'SU': '아에로플로트',
+          'JJ': 'LATAM',
+          'AM': '아에로멕시코',
+          'AC': '에어캐나다',
+          'NZ': '에어뉴질랜드',
+          'VN': '베트남항공',
+          'PR': '필리핀항공',
+          '5J': '세부퍼시픽',
+          '7C': '제주항공',
+          'TW': '티웨이항공',
+          'LJ': '진에어',
+          'BX': '에어부산',
+          'ZE': '이스타항공',
+          'RS': '플라이강원',
+          '4V': '에어로케이',
+        };
 
-          // 항공사 코드를 이름으로 변환
-          const airlineCode = offer.validatingAirlineCodes?.[0] || firstSegment?.carrierCode || 'Unknown';
-          const airlineNames: { [key: string]: string } = {
-            'KE': '대한항공',
-            'OZ': '아시아나항공',
-            'JL': '일본항공',
-            'NH': '전일본공수',
-            'TG': '타이항공',
-            'SQ': '싱가포르항공',
-            'CX': '캐세이퍼시픽',
-            'BR': '에바항공',
-            'CI': '중화항공',
-            'CZ': '중국남방항공',
-            'MU': '중국동방항공',
-            'CA': '중국국제항공',
-            'AA': '아메리칸항공',
-            'DL': '델타항공',
-            'UA': '유나이티드항공',
-            'LH': '루프트한자',
-            'AF': '에어프랑스',
-            'BA': '영국항공',
-            'KL': 'KLM',
-            'QF': '콴타스항공',
-            'EK': '에미레이트항공',
-            'QR': '카타르항공',
-            'TK': '터키항공',
-            'SU': '아에로플로트',
-            'JJ': 'LATAM',
-            'AM': '아에로멕시코',
-            'AC': '에어캐나다',
-            'NZ': '에어뉴질랜드',
-            'VN': '베트남항공',
-            'PR': '필리핀항공',
-            '5J': '세부퍼시픽',
-            '7C': '제주항공',
-            'TW': '티웨이항공',
-            'LJ': '진에어',
-            'BX': '에어부산',
-            'ZE': '이스타항공',
-            'RS': '플라이강원',
-            '4V': '에어로케이',
-          };
+        const allFlights: FlightItem[] = flightDataArray.map((flight, index) => {
+          // durationMinutes를 PT 형식으로 변환
+          const hours = Math.floor(flight.durationMinutes / 60);
+          const minutes = flight.durationMinutes % 60;
+          const duration = `PT${hours}H${minutes}M`;
 
-          // 목적지 정보 (여러 목적지 검색 시 destinationInfo가 있음)
-          const destinationInfo = (offer as any).destinationInfo;
-          const destinationName = destinationInfo ? destinationInfo.name : undefined;
+          // 항공사 코드를 한글 이름으로 변환
+          const airlineCode = flight.airline || '';
+          const airlineName = airlineNames[airlineCode] || airlineCode || '알 수 없음';
 
-          // 세그먼트 정보 확인
-          const segments = firstItinerary?.segments || [];
-          console.log(`항공권 ${index} - 항공사 코드: ${airlineCode}, 항공사명: ${airlineNames[airlineCode] || airlineCode}, 세그먼트 수: ${segments.length}`);
+          // 고유 ID 생성: 인덱스와 모든 주요 정보를 포함하여 고유성 보장
+          const firstSegment = flight.segments?.[0];
+          const segmentInfo = firstSegment ? `${firstSegment.flightNo}-${firstSegment.depTime}` : '';
+          const uniqueId = `flight-${index}-${flight.departureAirport}-${flight.arrivalAirport}-${flight.departureTime}-${flight.priceWon}-${segmentInfo}`;
 
           const flightItem: FlightItem = {
-            id: offer.id || `flight-${index}`,
-            airline: airlineNames[airlineCode] || airlineCode,
+            id: uniqueId,
+            airline: airlineName,
             departure: {
-              airport: firstSegment?.departure.iataCode || '',
-              time: firstSegment?.departure.at ? new Date(firstSegment.departure.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '',
+              airport: flight.departureAirport || '',
+              time: flight.departureTime || '',
             },
             arrival: {
-              airport: lastSegment?.arrival.iataCode || '',
-              time: lastSegment?.arrival.at ? new Date(lastSegment.arrival.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '',
+              airport: flight.arrivalAirport || '',
+              time: flight.arrivalTime || '',
             },
-            destinationName,
-            duration: firstItinerary?.duration || '',
+            duration: duration,
             price: {
-              total: offer.price?.total || '0',
-              currency: offer.price?.currency || 'KRW',
+              total: flight.priceWon.toString(),
+              currency: 'KRW',
             },
-            segments: segments.map(seg => ({
-              carrierCode: seg.carrierCode,
-              flightNumber: `${seg.carrierCode}${seg.number}`,
+            segments: flight.segments?.map(seg => ({
+              carrierCode: seg.flightNo.substring(0, 2) || '',
+              flightNumber: seg.flightNo,
               departure: {
-                airport: seg.departure.iataCode,
-                time: new Date(seg.departure.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+                airport: seg.from,
+                time: seg.depTime,
               },
               arrival: {
-                airport: seg.arrival.iataCode,
-                time: new Date(seg.arrival.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+                airport: seg.to,
+                time: seg.arrTime,
               },
-            })),
+            })) || [],
           };
-
-          console.log(`항공권 ${index} 변환 결과:`, {
-            airline: flightItem.airline,
-            segmentsCount: flightItem.segments.length,
-            firstFlightNumber: flightItem.segments[0]?.flightNumber,
-            departureAirport: flightItem.departure.airport,
-            arrivalAirport: flightItem.arrival.airport,
-            destinationName: flightItem.destinationName,
-            lastSegmentArrival: lastSegment?.arrival.iataCode,
-          });
 
           return flightItem;
         });
 
-        // 중복 제거: 항공사, 출발/도착 공항, 출발 시간, 가격이 같은 항공권은 하나만 표시
+        console.log('변환된 항공권 개수:', allFlights.length);
+        console.log('변환된 항공권 목록:', allFlights.map(f => ({
+          id: f.id,
+          airline: f.airline,
+          route: `${f.departure.airport} -> ${f.arrival.airport}`,
+          time: f.departure.time,
+          price: f.price.total,
+        })));
+
+        // 백엔드에서 이미 필터링된 데이터이므로, 완전히 동일한 항공권만 제거
+        // (편명, 출발/도착 공항, 출발 시간, 가격이 모두 동일한 경우만)
         const uniqueFlights = allFlights.filter((flight, index, self) => {
-          // 고유 키 생성: 항공사 + 출발공항 + 도착공항 + 출발시간 + 가격
-          const uniqueKey = `${flight.airline}-${flight.departure.airport}-${flight.arrival.airport}-${flight.departure.time}-${flight.price.total}`;
-          
-          // 첫 번째로 나타나는 항공권만 유지
+          const uniqueKey = `${flight.airline}-${flight.departure.airport}-${flight.arrival.airport}-${flight.departure.time}-${flight.price.total}-${flight.segments[0]?.flightNumber || ''}`;
           return index === self.findIndex(f => {
-            const fKey = `${f.airline}-${f.departure.airport}-${f.arrival.airport}-${f.departure.time}-${f.price.total}`;
+            const fKey = `${f.airline}-${f.departure.airport}-${f.arrival.airport}-${f.departure.time}-${f.price.total}-${f.segments[0]?.flightNumber || ''}`;
             return fKey === uniqueKey;
           });
         });
 
-        console.log('최종 항공권 리스트:', uniqueFlights.map(f => ({
-          id: f.id,
+        console.log('중복 제거 후 항공권 개수:', uniqueFlights.length);
+        console.log('최종 항공권 목록:', uniqueFlights.map(f => ({
           airline: f.airline,
-          segmentsCount: f.segments?.length || 0,
-          firstFlightNumber: f.segments?.[0]?.flightNumber,
+          route: `${f.departure.airport} -> ${f.arrival.airport}`,
+          time: f.departure.time,
+          price: f.price.total,
         })));
 
-        // 국내/국외 필터링
-        const isDomestic = route.params?.isDomestic ?? true; // 기본값: 국내
-        const domesticAirports = ['ICN', 'GMP', 'CJU', 'PUS', 'TAE', 'KPO', 'USN', 'WJU']; // 국내 공항 코드 목록
-        
-        const filteredFlights = uniqueFlights.filter(flight => {
-          const arrivalAirport = flight.arrival.airport;
-          if (isDomestic) {
-            // 국내 선택 시: 도착 공항이 국내 공항인 경우만
-            return domesticAirports.includes(arrivalAirport);
-          } else {
-            // 국외 선택 시: 도착 공항이 국내 공항이 아닌 경우만
-            return !domesticAirports.includes(arrivalAirport);
-          }
-        });
-
-        console.log('필터링 후 항공권 리스트:', {
-          isDomestic,
-          beforeFilter: uniqueFlights.length,
-          afterFilter: filteredFlights.length,
-        });
-
         // 정렬 적용
-        const sorted = [...filteredFlights].sort((a, b) => {
+        const sorted = [...uniqueFlights].sort((a, b) => {
           if (sortBy === 'price') {
-            // 가격 기준 정렬
             const priceA = parseFloat(a.price.total) || 0;
             const priceB = parseFloat(b.price.total) || 0;
             return sortOrder === 'asc' ? priceA - priceB : priceB - priceA;
           } else {
-            // 출발시간 기준 정렬
             const timeA = a.departure.time || '';
             const timeB = b.departure.time || '';
             if (!timeA || !timeB) return 0;
             
-            // 시간 문자열 파싱 (오전/오후 제거, HH:MM 형식으로 변환)
             const parseTime = (timeStr: string): number => {
-              // "오전 09:00" 또는 "09:00" 형식 처리
               const cleaned = timeStr.replace(/오전|오후|AM|PM/gi, '').trim();
               const parts = cleaned.split(':');
               if (parts.length !== 2) return 0;
               const hour = parseInt(parts[0], 10) || 0;
               const minute = parseInt(parts[1], 10) || 0;
-              // 오후 시간 처리 (12시 이후)
               let totalHour = hour;
               if (timeStr.includes('오후') || timeStr.includes('PM')) {
                 if (hour !== 12) totalHour = hour + 12;
@@ -418,13 +408,42 @@ export default function ResultScreen() {
 
         setFlightList(sorted);
         
-        // 각 항공권에 대해 호텔 가격과 환전가능 금액 가져오기
-        sorted.forEach(async (flight) => {
-          await fetchHotelPrices(flight);
-          await fetchExchangeAmount(flight);
-        });
+        // 백엔드에서 받은 환율 정보를 각 항공권에 적용
+        if (tripData.exchange) {
+          const exchangeRates = tripData.exchange.rates;
+          sorted.forEach((flight) => {
+            // 도착 공항에 따른 통화 결정
+            const arrivalAirport = flight.arrival.airport;
+            let toCurrency = 'USD';
+            let exchangeRate = exchangeRates.USD || 1;
+            
+            if (arrivalAirport === 'NRT' || arrivalAirport === 'HND' || arrivalAirport === 'KIX') {
+              toCurrency = 'JPY';
+              exchangeRate = exchangeRates.JPY || 1;
+            }
+            
+            const flightPrice = parseFloat(flight.price.total) || 0;
+            const convertedAmount = flightPrice / exchangeRate;
+            
+            setExchangeAmounts(prev => ({
+              ...prev,
+              [flight.id]: {
+                currency: toCurrency,
+                amount: convertedAmount,
+                exchangeRate: exchangeRate,
+              },
+            }));
+          });
+        }
+
+        // 호텔 정보는 백엔드에서 제공되면 처리
+        // 현재는 hotels 배열이 비어있거나 정의되지 않았을 수 있음
+        if (tripData.hotels && tripData.hotels.length > 0) {
+          // 호텔 데이터 처리 (백엔드에서 제공되는 구조에 맞게 수정 필요)
+          console.log('호텔 데이터:', tripData.hotels);
+        }
       } else {
-        console.error('항공권 검색 실패:', response.error);
+        console.error('백엔드 여행 검색 실패:', response.error);
         setFlightList([]);
       }
     } catch (error) {
@@ -435,102 +454,11 @@ export default function ResultScreen() {
     }
   };
 
-  const fetchHotelPrices = async (flight: FlightItem) => {
-    try {
-      if (!route.params?.departureDate || !route.params?.arrivalDate) return;
-      
-      const peopleCount = route.params?.peopleCount || '1명';
-      const adults = parseInt(peopleCount.replace('명', '')) || 1;
-      
-      const formatDate = (date: Date): string => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      };
+  // 백엔드 API에서 호텔 정보를 받아오므로 이 함수는 더 이상 사용하지 않음
+  // const fetchHotelPrices = async (flight: FlightItem) => { ... }
 
-      // 공항 코드를 도시 코드로 변환 (간단한 매핑)
-      const airportToCityCode: { [key: string]: string } = {
-        'NRT': 'TYO', 'HND': 'TYO', // 도쿄
-        'KIX': 'OSA', // 오사카
-        'CJU': 'CJU', // 제주
-        'BKK': 'BKK', // 방콕
-        'ICN': 'SEL', // 서울
-      };
-      
-      const cityCode = airportToCityCode[flight.arrival.airport] || flight.arrival.airport;
-      
-      const hotelParams: HotelSearchParams = {
-        cityCode,
-        checkInDate: formatDate(route.params.departureDate),
-        checkOutDate: formatDate(route.params.arrivalDate),
-        adults,
-        priceRange: {
-          max: parseInt(flight.price.total) || undefined,
-        },
-      };
-
-      const response = await searchHotels(hotelParams);
-      
-      if (response.success && response.data) {
-        const hotels: HotelPrice[] = (response.data.data || []).slice(0, 3).map((hotel: any) => ({
-          hotelName: hotel.hotelName || '호텔명 없음',
-          price: parseFloat(hotel.price?.total || '0'),
-          currency: hotel.price?.currency || 'KRW',
-          rating: hotel.rating,
-        }));
-        
-        setHotelPrices(prev => ({
-          ...prev,
-          [flight.id]: hotels,
-        }));
-      }
-    } catch (error) {
-      console.error('호텔 가격 조회 오류:', error);
-    }
-  };
-
-  const fetchExchangeAmount = async (flight: FlightItem) => {
-    try {
-      const flightPrice = parseFloat(flight.price.total) || 0;
-      if (flightPrice === 0) return;
-
-      // 목적지에 따른 통화 코드 매핑
-      const destinationCurrency: { [key: string]: string } = {
-        'NRT': 'JPY', 'HND': 'JPY', // 일본
-        'KIX': 'JPY', // 일본
-        'BKK': 'THB', // 태국
-        'CJU': 'KRW', // 제주 (원화)
-      };
-      
-      const toCurrency = destinationCurrency[flight.arrival.airport] || 'USD';
-      if (toCurrency === 'KRW') {
-        // 원화는 환전 불필요
-        return;
-      }
-
-      const exchangeParams: ExchangeParams = {
-        fromCurrency: 'KRW',
-        toCurrency,
-        amount: flightPrice,
-      };
-
-      const response = await getExchangeRate(exchangeParams);
-      
-      if (response.success && response.data) {
-        setExchangeAmounts(prev => ({
-          ...prev,
-          [flight.id]: {
-            currency: toCurrency,
-            amount: response.data!.convertedAmount,
-            exchangeRate: response.data!.exchangeRate,
-          },
-        }));
-      }
-    } catch (error) {
-      console.error('환전 정보 조회 오류:', error);
-    }
-  };
+  // 백엔드 API에서 환율 정보를 받아오므로 이 함수는 더 이상 사용하지 않음
+  // const fetchExchangeAmount = async (flight: FlightItem) => { ... }
 
   const fetchTravelList = async () => {
     try {

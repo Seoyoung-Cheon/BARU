@@ -26,7 +26,14 @@ export default function DetailScreen() {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(1)).current;
 
-  const { flight, hotels, exchange } = route.params;
+  const { flight, hotels, exchange, departureDate } = route.params;
+  
+  const formatDate = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}.${month}.${day}`;
+  };
 
   const handleGoBack = () => {
     navigation.goBack();
@@ -144,6 +151,15 @@ export default function DetailScreen() {
               {flight.departure.airport} {flight.departure.time}
             </Text>
           </View>
+          
+          {departureDate && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>출발일자:</Text>
+              <Text style={styles.infoValue}>
+                {formatDate(departureDate)}
+              </Text>
+            </View>
+          )}
           
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>도착지:</Text>
